@@ -4,7 +4,9 @@
 - 1~3세트 x (서논술형1: 빈칸형 / 서논술형2: 설명방법 선택형 / 서논술형3: 시청각 연출형)
 - 규칙(키워드+의미) 기반 채점: 용어가 없어도 '의미'가 담기면 인정
 - 오개념(반대 방향) 자동 탐지, 설명 방법 특성 일치 여부 검증, 결론 방향 확인
-- 화면 구성: 자료(지문/기획안)는 파란 박스, 발문은 일반 텍스트, 조건은 회색 박스에 표시
+- 화면 구성:
+    지문(파란 박스) → 발문(바탕 텍스트) → 조건(회색 박스, 있는 경우)
+    → 문제 표(파란 박스) → 표 바로 아래 답안 입력란(라벨/안내문 없이 붙여서 배치)
 """
 
 import re
@@ -16,7 +18,6 @@ import streamlit as st
 # ------------------------------------------------------------------
 
 def norm(s: str) -> str:
-    """공백 제거로 느슨한 비교."""
     return re.sub(r"\s+", "", s or "")
 
 
@@ -25,7 +26,6 @@ def contains(text: str, keyword: str) -> bool:
 
 
 def group_matched(text: str, group) -> bool:
-    """group(=동의어·유사표현 리스트) 중 하나라도 포함되면 True (OR 매칭)."""
     return any(contains(text, kw) for kw in group)
 
 
@@ -52,7 +52,6 @@ METHOD_PATTERNS = {
 
 
 def extract_method(text: str):
-    """문장 끝 괄호 안 설명 방법 명칭을 추출/정규화."""
     m = re.search(r"[\(（]([^\)）]+)[\)）]\s*$", (text or "").strip())
     if not m:
         return None, (text or "")
@@ -63,7 +62,6 @@ def extract_method(text: str):
 
 
 def score_blank(text, cfg):
-    """빈칸형(서논술형1) 단일 항목 채점."""
     text = text or ""
     groups = cfg.get("groups", [])
     flags = [group_matched(text, g) for g in groups]
@@ -90,7 +88,6 @@ def score_blank(text, cfg):
 
 
 def score_slot(text, cfg, other_method=None):
-    """서논술형2 - 문장 슬롯(설명 방법 + 내용) 채점."""
     method, body = extract_method(text)
     feedback = []
     if method is None:
@@ -134,7 +131,6 @@ def score_slot(text, cfg, other_method=None):
 
 
 def score_av(text, cfg):
-    """서논술형3 - 시각/청각 요소+효과 채점."""
     text = text or ""
     groups = cfg.get("groups", [])
     flags = [group_matched(text, g) for g in groups]
@@ -155,23 +151,31 @@ def score_av(text, cfg):
 
 
 # ------------------------------------------------------------------
-# 1. 화면 표시용 헬퍼 (자료=파란 박스 / 발문=일반 텍스트 / 조건=회색 박스)
+# 1. 화면 표시용 헬퍼
 # ------------------------------------------------------------------
 
 def _esc(text: str) -> str:
     return html.escape(text or "", quote=False).replace("\n", "<br>")
 
 
+TABLE_CSS = """
+<style>
+.qtable { width:100%; border-collapse:collapse; margin-top:6px; }
+.qtable th, .qtable td { border:1px solid #a9c9ea; padding:8px 10px; text-align:center; font-size:0.9rem; }
+.qtable th { background-color:#d7e8fb; }
+.qtable td.blank { background-color:#ffffff; color:#1a4d8f; font-weight:700; }
+</style>
+"""
+
+
 def render_material_box(title: str, text: str):
-    """자료(지문·상황·기획안 등)를 파란 박스로 표시."""
+    """지문 등 자료를 파란 박스로 표시."""
     st.markdown(
         f"""
         <div style="background-color:#eaf2fb; border:1px solid #a9c9ea;
                     border-radius:10px; padding:18px 20px; margin-bottom:14px;
                     line-height:1.7; font-size:0.95rem;">
-            <div style="font-weight:600; color:#1a4d8f; margin-bottom:8px;">
-                📘 {title}
-            </div>
+            <div style="font-weight:600; color:#1a4d8f; margin-bottom:8px;">📘 {title}</div>
             <div>{_esc(text)}</div>
         </div>
         """,
@@ -181,21 +185,19 @@ def render_material_box(title: str, text: str):
 
 def render_stem(text: str):
     """문제 발문을 바탕 텍스트(비박스)로 표시."""
-    st.markdown(f"<div style='font-size:1.02rem; line-height:1.7; margin:10px 0 16px 0;'>{_esc(text)}</div>",
+    st.markdown(f"<div style='font-size:1.02rem; line-height:1.7; margin:10px 0 12px 0;'>{_esc(text)}</div>",
                 unsafe_allow_html=True)
 
 
 def render_condition_box(conditions):
-    """조건을 회색 박스로 표시하고, 각 조건 앞에 중요 표시 이모지를 붙임."""
+    """조건을 회색 박스로 표시, 각 조건 앞에 중요 표시 이모지 부착."""
     if not conditions:
         return
-    items_html = "".join(
-        f"<div style='margin-bottom:8px;'>❗ {_esc(c)}</div>" for c in conditions
-    )
+    items_html = "".join(f"<div style='margin-bottom:8px;'>❗ {_esc(c)}</div>" for c in conditions)
     st.markdown(
         f"""
         <div style="background-color:#f1f1f1; border:1px solid #cfcfcf;
-                    border-radius:10px; padding:16px 20px; margin-bottom:16px;
+                    border-radius:10px; padding:16px 20px; margin-bottom:14px;
                     line-height:1.6; font-size:0.93rem;">
             <div style="font-weight:600; color:#444444; margin-bottom:8px;">조건</div>
             {items_html}
@@ -205,8 +207,51 @@ def render_condition_box(conditions):
     )
 
 
+def build_table_html(header, rows):
+    """header: 문자열 리스트 / rows: [[{'text':..,'blank':bool}, ...], ...]"""
+    thead = "<tr>" + "".join(f"<th>{_esc(h)}</th>" for h in header) + "</tr>"
+    body = ""
+    for row in rows:
+        cells = ""
+        for cell in row:
+            cls = " class='blank'" if cell.get("blank") else ""
+            cells += f"<td{cls}>{_esc(cell['text'])}</td>"
+        body += f"<tr>{cells}</tr>"
+    return f"<table class='qtable'>{thead}{body}</table>"
+
+
+def render_question_table(intro, table_html):
+    """문제의 표(자료)를 파란 박스에 표시. 바로 아래에 입력란이 붙어야 하므로 하단 여백 최소화."""
+    intro_html = f"<div style='margin-bottom:8px;'>{_esc(intro)}</div>" if intro else ""
+    st.markdown(
+        f"""
+        <div style="background-color:#eaf2fb; border:1px solid #a9c9ea;
+                    border-radius:10px 10px 0 0; border-bottom:none;
+                    padding:16px 18px 10px 18px; font-size:0.92rem;">
+            {intro_html}{table_html}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_input_dock_open():
+    """표 바로 아래, 입력란을 감싸는 연결된 박스 시작(위쪽 모서리 없이 붙임)."""
+    st.markdown(
+        """
+        <div style="background-color:#f7fbff; border:1px solid #a9c9ea; border-top:none;
+                    border-radius:0 0 10px 10px; padding:12px 18px 16px 18px; margin-bottom:16px;">
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_input_dock_close():
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
 # ------------------------------------------------------------------
-# 2. 문항 데이터 (지문 · 발문 · 자료 · 조건 · 채점 기준)
+# 2. 문항 데이터
 # ------------------------------------------------------------------
 
 PASSAGE = {
@@ -263,15 +308,24 @@ CONFIG = {
     ("1", "1"): {
         "type": "blank",
         "stem": "윗글을 요약하여 표로 정리하였다. ㉠~㉢에 들어갈 내용을 찾아 쓰시오.",
+        "table_header": ["과제의 특성", "효율적 환경 및 방법", "관련된 심리 현상"],
+        "table_rows": [
+            [{"text": "( ㉠ )", "blank": True},
+             {"text": "커피숍, 도서관 등에서 하거나 모임을 만들어 다른 사람들과 함께 함"},
+             {"text": "사회적 촉진"}],
+            [{"text": "지나치게 어렵거나 도전이 필요한 과제"},
+             {"text": "( ㉡ )", "blank": True},
+             {"text": "( ㉢ )", "blank": True}],
+        ],
         "blanks": [
-            {"key": "㉠", "label": "㉠",
+            {"key": "㉠", "symbol": "㉠",
              "groups": [["쉬운", "노력이 적게", "간단한", "가벼운", "취미"]],
              "opposite": ["어려운", "도전이 필요"]},
-            {"key": "㉡", "label": "㉡",
+            {"key": "㉡", "symbol": "㉡",
              "groups": [["연습", "익숙"], ["혼자", "단독"], ["차분", "집중"]],
              "min_match": 2,
              "opposite": ["커피숍", "도서관", "모임", "함께"]},
-            {"key": "㉢", "label": "㉢", "exact_term": "사회적 억제",
+            {"key": "㉢", "symbol": "㉢", "exact_term": "사회적 억제",
              "groups": [["사회적 억제"]], "opposite": ["사회적 촉진"]},
         ],
         "model": {"㉠": "비교적 쉬운 취미 생활이나 큰 노력을 들일 필요가 없는 과제",
@@ -280,22 +334,25 @@ CONFIG = {
     },
     ("1", "2"): {
         "type": "dual_method",
-        "stem": (
-            "윗글을 활용하여 ‘과제 난이도에 따른 효율적인 학습 전략’에 대한 설명문을 작성하려 "
-            "한다. 주어진 첫 문장에 이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.\n\n"
-            "첫 문장: 과제의 특성과 난이도에 따라 우리의 학습 효율을 높이는 방법은 다르게 "
-            "적용되어야 한다. ( ㉮ )"
-        ),
+        "stem": "윗글을 활용하여 ‘과제 난이도에 따른 효율적인 학습 전략’에 대한 설명문을 작성하려 한다. "
+                "주어진 첫 문장에 이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.",
         "conditions": [
             "서로 다른 2가지의 설명 방법을 사용하여, 주어진 문장에 이어지는 문장을 (1), (2)에 각각 하나씩 작성할 것.",
             "윗글에 제시된 내용만을 활용하여 문장을 구성할 것. (지문에 없는 외부 배경지식을 활용할 경우 인정하지 않음.)",
             "각 문장의 끝에 자신이 사용한 설명 방법의 명칭을 괄호에 넣어 표기할 것.",
         ],
-        "slot1": {"label": "(1) 쉬운 과제 관련 문장",
+        "table_header": ["구분", "내용"],
+        "table_rows": [
+            [{"text": "주어진 문장"},
+             {"text": "과제의 특성과 난이도에 따라 우리의 학습 효율을 높이는 방법은 다르게 적용되어야 한다."}],
+            [{"text": "(1)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+            [{"text": "(2)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+        ],
+        "slot1": {"symbol": "(1)",
                   "content_groups": [["도서관", "커피숍", "모임", "함께", "다른 사람들과"]],
                   "content_min": 1,
                   "forbidden": ["혼자", "차분", "연습하며 익숙"]},
-        "slot2": {"label": "(2) 어려운 과제 관련 문장",
+        "slot2": {"symbol": "(2)",
                   "content_groups": [["혼자", "단독"], ["연습", "익숙"], ["차분", "집중"]],
                   "content_min": 2,
                   "forbidden": ["도서관", "커피숍", "모임"]},
@@ -310,27 +367,26 @@ CONFIG = {
     },
     ("1", "3"): {
         "type": "av",
-        "stem": "윗글을 바탕으로 ‘상황에 맞는 학습 공간 선택법’을 설명하는 영상을 제작하려 한다. 다음 기획안을 보고 물음에 답하시오.",
-        "given_title": "영상 기획안",
-        "given": (
-            "주제: 사회적 촉진과 억제를 활용한 스마트한 공부법\n\n"
-            "[장면 1] 쉬운 과제를 할 때\n"
-            "시각 요소: 백색소음이 있는 밝은 도서관에서 친구들과 가볍게 미소 지으며 공부하는 "
-            "학생들의 모습을 넓은 화면(풀샷)으로 보여줌.\n"
-            "청각 요소: 경쾌하고 리듬감 있는 배경음악과 함께 사람들의 가벼운 발소리와 책장 "
-            "넘기는 소리를 깔아줌.\n\n"
-            "[장면 2] 어려운 과제를 할 때\n"
-            "시각 요소: ( Ⓐ )\n"
-            "청각 요소: ( Ⓑ )"
-        ),
+        "stem": "윗글을 바탕으로 ‘상황에 맞는 학습 공간 선택법’을 설명하는 영상을 제작하려 한다. "
+                "다음 기획안을 보고 물음에 답하시오.",
         "conditions": [
             "윗글을 참고하여 어려운 과제를 할 때 필요한 환경의 특성이 잘 드러나도록 Ⓐ와 Ⓑ에 들어갈 연출 계획을 세울 것.",
             "자신이 설정한 시각·청각 요소가 글의 내용을 전달하는 데 어떤 효과가 있는지 각각 서술할 것.",
         ],
-        "A": {"label": "시각 요소(Ⓐ)+효과",
+        "table_intro": "주제: 사회적 촉진과 억제를 활용한 스마트한 공부법",
+        "table_header": ["장면", "시각 요소", "청각 요소"],
+        "table_rows": [
+            [{"text": "장면 1 (쉬운 과제)"},
+             {"text": "백색소음이 있는 밝은 도서관에서 친구들과 가볍게 미소 지으며 공부하는 학생들의 모습(풀샷)"},
+             {"text": "경쾌하고 리듬감 있는 배경음악, 발소리·책장 넘기는 소리"}],
+            [{"text": "장면 2 (어려운 과제)"},
+             {"text": "( Ⓐ )", "blank": True},
+             {"text": "( Ⓑ )", "blank": True}],
+        ],
+        "A": {"symbol": "Ⓐ",
               "groups": [["혼자", "1인", "단독"], ["조용", "차분", "집중"]],
               "min_match": 2, "opposite": ["함께", "여러 사람", "밝은", "미소"]},
-        "B": {"label": "청각 요소(Ⓑ)+효과",
+        "B": {"symbol": "Ⓑ",
               "groups": [["정적", "조용", "무음", "소음", "고요"]],
               "min_match": 1, "opposite": ["경쾌", "배경음악", "리듬감"]},
         "model": {"A": "조용한 1인 열람실에서 학생이 문제집에 몰두하는 모습을 클로즈업 — 타인의 시선이 없는 몰입 상태를 강조해 어려운 과제일수록 혼자 집중하는 환경이 필요함을 전달한다.",
@@ -340,34 +396,45 @@ CONFIG = {
     ("2", "1"): {
         "type": "blank",
         "stem": "윗글을 요약하여 표로 정리하였다. ㉠~㉢에 들어갈 내용을 찾아 쓰시오.",
+        "table_header": ["대상", "물의 상태에 비유", "전하의 상태", "위험성"],
+        "table_rows": [
+            [{"text": "실생활 전기"}, {"text": "흐르는 물"}, {"text": "전하가 이동함"}, {"text": "감전 등의 위험이 있음"}],
+            [{"text": "정전기"},
+             {"text": "( ㉠ )", "blank": True},
+             {"text": "( ㉡ )", "blank": True},
+             {"text": "( ㉢ )", "blank": True}],
+        ],
         "blanks": [
-            {"key": "㉠", "label": "㉠ 물의 상태에 비유",
+            {"key": "㉠", "symbol": "㉠",
              "groups": [["고여 있는", "고인"]], "opposite": ["흐르는 물"]},
-            {"key": "㉡", "label": "㉡ 전하의 상태",
+            {"key": "㉡", "symbol": "㉡",
              "groups": [["이동하지 않", "머물러", "정지 상태", "안 움직"]],
              "opposite": ["전압이 높", "전압만"]},
-            {"key": "㉢", "label": "㉢ 위험성",
+            {"key": "㉢", "symbol": "㉢",
              "groups": [["위험하지 않", "안전", "피해가 없"]], "opposite": ["위험하다", "위험함", "감전"]},
         ],
         "model": {"㉠": "높은 곳에 고여 있는 물", "㉡": "전하가 이동하지 않고 머물러 있음", "㉢": "위험하지 않음(별 피해가 없음)"},
     },
     ("2", "2"): {
         "type": "dual_method",
-        "stem": (
-            "윗글을 활용하여 ‘정전기의 특징’에 대한 설명문을 작성하려 한다. 주어진 첫 문장에 "
-            "이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.\n\n"
-            "첫 문장: 겨울철에 흔히 겪는 정전기는 우리가 평소 집에서 사용하는 전기와는 다른 "
-            "뚜렷한 특징이 있다. ( ㉮ )"
-        ),
+        "stem": "윗글을 활용하여 ‘정전기의 특징’에 대한 설명문을 작성하려 한다. "
+                "주어진 첫 문장에 이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.",
         "conditions": [
             "주어진 문장에 이어지는 문장을 (1), (2)에 각각 하나씩 작성할 것. (1)과 (2)에는 서로 다른 설명 방법이 1가지 이상 활용되어야 하며, 각 문장에 사용된 설명 방법의 명칭을 괄호에 넣어 문장 끝에 기재할 것.",
             "윗글에 제시된 내용만을 활용하여 문장을 구성할 것.",
             "(1)과 (2)가 논리적 흐름을 갖고 이어지도록 할 것.",
         ],
-        "slot1": {"label": "(1) 정전기의 정의·어원 관련 문장",
+        "table_header": ["구분", "내용"],
+        "table_rows": [
+            [{"text": "주어진 문장"},
+             {"text": "겨울철에 흔히 겪는 정전기는 우리가 평소 집에서 사용하는 전기와는 다른 뚜렷한 특징이 있다."}],
+            [{"text": "(1)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+            [{"text": "(2)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+        ],
+        "slot1": {"symbol": "(1)",
                   "content_groups": [["정지 상태", "변화하지 않"], ["정(靜)", "정", "한자"]],
                   "content_min": 1, "forbidden": ["고여 있는 물", "흐르는 물"]},
-        "slot2": {"label": "(2) 비유·비교 관련 문장",
+        "slot2": {"symbol": "(2)",
                   "content_groups": [["흐르는 물", "고여 있는 물", "고인 물"], ["전압", "위험하지 않", "안전"]],
                   "content_min": 2, "forbidden": ["위험하다"]},
         "model": {
@@ -382,25 +449,24 @@ CONFIG = {
     ("2", "3"): {
         "type": "av",
         "stem": "윗글을 바탕으로 ‘정전기의 특징’을 설명하는 영상을 제작하려 한다. 다음 기획안을 보고 물음에 답하시오.",
-        "given_title": "영상 기획안",
-        "given": (
-            "주제: 전압은 높지만 위험하지 않은 정전기의 비밀\n\n"
-            "[장면 1] 실생활 전기(흐르는 물)\n"
-            "시각 요소: 거대한 폭포수가 콸콸 쏟아져 내려오며 물레방아를 힘차게 돌리는 역동적인 "
-            "그래픽을 보여줌.\n"
-            "청각 요소: 물이 거세게 부딪히는 웅장하고 큰 소리를 배경음으로 사용함.\n\n"
-            "[장면 2] 정전기(고여 있는 물)\n"
-            "시각 요소: ( Ⓐ )\n"
-            "청각 요소: ( Ⓑ )"
-        ),
         "conditions": [
             "윗글을 바탕으로 정전기의 특성이 잘 드러나도록 Ⓐ와 Ⓑ에 들어갈 연출 계획을 세울 것.",
             "설정한 시각 및 청각 요소의 연출 효과를 각각 서술하되, 반드시 윗글의 내용을 근거로 포함할 것.",
         ],
-        "A": {"label": "시각 요소(Ⓐ)+효과",
+        "table_intro": "주제: 전압은 높지만 위험하지 않은 정전기의 비밀",
+        "table_header": ["장면", "시각 요소", "청각 요소"],
+        "table_rows": [
+            [{"text": "장면 1 (흐르는 물)"},
+             {"text": "거대한 폭포수가 콸콸 쏟아지며 물레방아를 돌리는 역동적인 그래픽"},
+             {"text": "물이 거세게 부딪히는 웅장하고 큰 소리"}],
+            [{"text": "장면 2 (고여 있는 물)"},
+             {"text": "( Ⓐ )", "blank": True},
+             {"text": "( Ⓑ )", "blank": True}],
+        ],
+        "A": {"symbol": "Ⓐ",
               "groups": [["고여", "멈춰", "정지", "머물러"]], "min_match": 1,
               "opposite": ["흐르는", "폭포", "물레방아", "콸콸"]},
-        "B": {"label": "청각 요소(Ⓑ)+효과",
+        "B": {"symbol": "Ⓑ",
               "groups": [["정적", "고요", "소리 없", "무음"]], "min_match": 1,
               "opposite": ["웅장", "큰 소리", "콸콸", "부딪히는"]},
         "model": {"A": "높은 곳의 저수지에 물이 고요하게 고여 있는 모습을 정지된 카메라로 보여줌 — 전하가 이동하지 않고 머물러 있는 상태를 시각화한다.",
@@ -410,13 +476,24 @@ CONFIG = {
     ("3", "1"): {
         "type": "blank",
         "stem": "윗글을 요약하여 표로 정리하였다. ㉠~㉢에 들어갈 내용을 찾아 쓰시오.",
+        "table_header": ["대상", "올림픽 경기에 비유", "예술로 볼 수 있는가(근거 포함)", "예술로서의 가치"],
+        "table_rows": [
+            [{"text": "인간의 예술"},
+             {"text": "인간 선수의 노력과 열정이 담긴 올림픽 경기"},
+             {"text": "작가의 경험, 관점, 환경이 담겨 있으므로 예술이다."},
+             {"text": "감상자에게 남다른 감동을 줌"}],
+            [{"text": "인공 지능의 예술"},
+             {"text": "( ㉠ )", "blank": True},
+             {"text": "( ㉡ )", "blank": True},
+             {"text": "( ㉢ )", "blank": True}],
+        ],
         "blanks": [
-            {"key": "㉠", "label": "㉠ 올림픽 경기에 비유(또는 제작 방식)",
+            {"key": "㉠", "symbol": "㉠",
              "groups": [["피겨 스케이팅", "로봇", "데이터", "알고리즘", "학습"]], "opposite": []},
-            {"key": "㉡", "label": "㉡ 예술로 볼 수 있는가(근거 포함)",
+            {"key": "㉡", "symbol": "㉡",
              "groups": [["예술로 보기 어렵", "예술이 아니"], ["감정", "느끼지 못"], ["철학", "이야기 없"]],
              "min_match": 2, "opposite": ["예술이다"]},
-            {"key": "㉢", "label": "㉢ 예술로서의 가치",
+            {"key": "㉢", "symbol": "㉢",
              "groups": [["감동을 주지 못", "울리지 못"], ["미술계", "변화", "범주", "확장", "상징적", "의미가 있"]],
              "min_match": 2, "opposite": ["가치가 전혀 없", "가치 없음"]},
         ],
@@ -426,21 +503,24 @@ CONFIG = {
     },
     ("3", "2"): {
         "type": "dual_method",
-        "stem": (
-            "윗글을 활용하여 ‘인공 지능이 그린 그림을 바라보는 시각’에 대한 설명문을 작성하려 "
-            "한다. 주어진 첫 문장에 이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.\n\n"
-            "첫 문장: 인공 지능이 그린 그림이 늘어나는 요즘, 우리는 이 작품들을 어떤 눈으로 "
-            "바라봐야 할지 올바르게 생각해야 한다. ( ㉮ )"
-        ),
+        "stem": "윗글을 활용하여 ‘인공 지능이 그린 그림을 바라보는 시각’에 대한 설명문을 작성하려 한다. "
+                "주어진 첫 문장에 이어지는 내용인 ㉮를 조건에 맞추어 작성하시오.",
         "conditions": [
             "주어진 문장에 이어지는 문장을 (1), (2)에 각각 하나씩 작성할 것. (1)과 (2)에는 서로 다른 설명 방법이 1가지 이상 활용되어야 하며, 각 문장에 사용된 설명 방법의 명칭을 괄호에 넣어 문장 끝에 기재할 것.",
             "윗글에 제시된 내용만을 활용하여 문장을 구성할 것.",
             "(1)과 (2)가 논리적 흐름을 갖고 이어지도록 할 것.",
         ],
-        "slot1": {"label": "(1) 예시 등 관련 문장",
+        "table_header": ["구분", "내용"],
+        "table_rows": [
+            [{"text": "주어진 문장"},
+             {"text": "인공 지능이 그린 그림이 늘어나는 요즘, 우리는 이 작품들을 어떤 눈으로 바라봐야 할지 올바르게 생각해야 한다."}],
+            [{"text": "(1)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+            [{"text": "(2)"}, {"text": "( ㉮ ) — 서술", "blank": True}],
+        ],
+        "slot1": {"symbol": "(1)",
                   "content_groups": [["에드몽", "데이터", "알고리즘", "학습"], ["감정", "철학", "이야기 없"]],
                   "content_min": 1, "forbidden": ["가치가 전혀 없"]},
-        "slot2": {"label": "(2) 비교·비유 관련 문장",
+        "slot2": {"symbol": "(2)",
                   "content_groups": [["피겨 스케이팅", "로봇"], ["감동", "울리지 못"], ["상징적", "가치", "범주", "확장"]],
                   "content_min": 2, "forbidden": ["예술이다"]},
         "model": {
@@ -454,26 +534,26 @@ CONFIG = {
     },
     ("3", "3"): {
         "type": "av",
-        "stem": "윗글을 바탕으로 ‘인공 지능이 그린 그림을 바라보는 시각’을 설명하는 영상을 제작하려 한다. 다음 기획안을 보고 물음에 답하시오. [총 6점]",
-        "given_title": "영상 기획안",
-        "given": (
-            "주제: 인간의 감정이 담긴 진정한 예술의 가치\n\n"
-            "[장면 1] 감정이 없는 완벽한 기술\n"
-            "시각 요소: 로봇이 한 번의 실수 없이 완벽하게 피겨 스케이팅을 해내지만 우리의 마음을 "
-            "울리지는 못하는 동영상을 보여줌.\n"
-            "청각 요소: 기계음이나 일정한 박자의 메트로놈 소리를 깔아 차갑고 정형화된 분위기를 조성함.\n\n"
-            "[장면 2] 마음에 울림을 주는 진정한 예술\n"
-            "시각 요소: ( Ⓐ )\n"
-            "청각 요소: ( Ⓑ )"
-        ),
+        "stem": "윗글을 바탕으로 ‘인공 지능이 그린 그림을 바라보는 시각’을 설명하는 영상을 제작하려 한다. "
+                "다음 기획안을 보고 물음에 답하시오. [총 6점]",
         "conditions": [
             "윗글을 바탕으로 인간이 만들어내는 예술의 특성이 잘 드러나도록 Ⓐ와 Ⓑ에 들어갈 연출 계획을 세울 것.",
             "설정한 시각 및 청각 요소의 연출 효과를 각각 서술하되, 반드시 윗글의 내용을 근거로 포함할 것.",
         ],
-        "A": {"label": "시각 요소(Ⓐ)+효과",
+        "table_intro": "주제: 인간의 감정이 담긴 진정한 예술의 가치",
+        "table_header": ["장면", "시각 요소", "청각 요소"],
+        "table_rows": [
+            [{"text": "장면 1 (감정이 없는 완벽한 기술)"},
+             {"text": "로봇이 실수 없이 완벽하게 피겨 스케이팅을 해내지만 감동을 주지 못하는 영상"},
+             {"text": "기계음·메트로놈 소리로 차갑고 정형화된 분위기"}],
+            [{"text": "장면 2 (마음에 울림을 주는 진정한 예술)"},
+             {"text": "( Ⓐ )", "blank": True},
+             {"text": "( Ⓑ )", "blank": True}],
+        ],
+        "A": {"symbol": "Ⓐ",
               "groups": [["화가", "인간"], ["감정", "눈물", "표정"], ["경험", "과정", "수정", "흔적"]],
               "min_match": 2, "opposite": ["로봇", "완벽하게", "실수 없이"]},
-        "B": {"label": "청각 요소(Ⓑ)+효과",
+        "B": {"symbol": "Ⓑ",
               "groups": [["숨소리", "붓", "자연스러운"], ["감정", "잔잔", "선율"]],
               "min_match": 1, "opposite": ["기계음", "메트로놈", "일정한 박자"]},
         "model": {"A": "화가가 수정 흔적이 남은 캔버스 앞에서 감정을 드러내는 모습을 보여줌 — 작가의 경험과 감정이 담긴 인간 예술의 특성을 시각화한다.",
@@ -488,7 +568,8 @@ TOTAL_POINTS = {"1": 3, "2": 6, "3": 6}
 # ------------------------------------------------------------------
 
 st.set_page_config(page_title="서논술형 자동 채점기", page_icon="📝", layout="centered")
-st.title("📝 서·논술형 자동 채점기")
+st.markdown(TABLE_CSS, unsafe_allow_html=True)
+st.title("📝 서·논술형 자동 채점기 (해냄연수 대비)")
 st.caption("규칙 기반 채점: 용어가 없어도 의미가 통하면 인정 · 오개념·방향 오류 자동 탐지 · 설명 방법 특성 검증")
 
 with st.sidebar:
@@ -502,98 +583,97 @@ with st.sidebar:
 cfg = CONFIG[(set_no, q_no)]
 st.subheader(f"{set_no}세트 · 서·논술형 {q_no}")
 
-# 자료(지문) — 파란 박스
 render_material_box("지문", PASSAGE[set_no])
-
-# 자료(기획안 등 추가 자료가 있는 경우) — 파란 박스
-if cfg.get("given"):
-    render_material_box(cfg.get("given_title", "자료"), cfg["given"])
-
-# 발문 — 바탕 텍스트
 render_stem(cfg["stem"])
-
-# 조건 — 회색 박스
 render_condition_box(cfg.get("conditions"))
 
-st.divider()
+table_html = build_table_html(cfg["table_header"], cfg["table_rows"])
+render_question_table(cfg.get("table_intro"), table_html)
 
-# ---------------- 서논술형 1: 빈칸형 ----------------
+# ---------------- 표 바로 아래 입력란 (라벨/안내문 없이 붙여서 배치) ----------------
+render_input_dock_open()
+
 if cfg["type"] == "blank":
+    cols = st.columns(len(cfg["blanks"]))
     inputs = {}
-    for b in cfg["blanks"]:
-        inputs[b["key"]] = st.text_input(b["label"], key=f"{set_no}{q_no}{b['key']}")
+    for col, b in zip(cols, cfg["blanks"]):
+        with col:
+            inputs[b["key"]] = st.text_input(
+                b["symbol"], key=f"{set_no}{q_no}{b['key']}",
+                placeholder=b["symbol"], label_visibility="collapsed",
+            )
 
-    if st.button("채점하기", type="primary"):
+elif cfg["type"] == "dual_method":
+    t1 = st.text_area(cfg["slot1"]["symbol"], key=f"{set_no}{q_no}slot1", height=80,
+                       placeholder=f"{cfg['slot1']['symbol']} 문장 입력", label_visibility="collapsed")
+    t2 = st.text_area(cfg["slot2"]["symbol"], key=f"{set_no}{q_no}slot2", height=80,
+                       placeholder=f"{cfg['slot2']['symbol']} 문장 입력", label_visibility="collapsed")
+
+else:  # av
+    a_text = st.text_area(cfg["A"]["symbol"], key=f"{set_no}{q_no}A", height=90,
+                           placeholder=f"{cfg['A']['symbol']} 요소 및 효과 입력", label_visibility="collapsed")
+    b_text = st.text_area(cfg["B"]["symbol"], key=f"{set_no}{q_no}B", height=90,
+                           placeholder=f"{cfg['B']['symbol']} 요소 및 효과 입력", label_visibility="collapsed")
+
+render_input_dock_close()
+
+# ---------------- 채점 ----------------
+if st.button("채점하기", type="primary"):
+    if cfg["type"] == "blank":
         total_pass = 0
         for b in cfg["blanks"]:
             passed, feedback, matched, total = score_blank(inputs[b["key"]], b)
             total_pass += int(passed)
             with st.container(border=True):
-                st.markdown(f"**{b['label']}**")
+                st.markdown(f"**{b['symbol']}**")
                 st.write(f"입력: {inputs[b['key']] or '(미입력)'}")
                 for f in feedback:
                     st.write(f)
         pts = round(total_pass / len(cfg["blanks"]) * TOTAL_POINTS[q_no], 1)
         st.success(f"### 총점(추정): {pts} / {TOTAL_POINTS[q_no]}점  ({total_pass}/{len(cfg['blanks'])}개 항목 통과)")
 
-    with st.expander("모범 답안 보기"):
-        for k, v in cfg["model"].items():
-            st.write(f"**{k}**: {v}")
-
-# ---------------- 서논술형 2: 설명 방법 선택형 ----------------
-elif cfg["type"] == "dual_method":
-    st.caption("각 문장 끝에 사용한 설명 방법을 괄호로 표기하세요. 예: ⋯공부하는 것이 효율적이다.(예시)")
-    t1 = st.text_area(cfg["slot1"]["label"], key=f"{set_no}{q_no}slot1", height=90)
-    t2 = st.text_area(cfg["slot2"]["label"], key=f"{set_no}{q_no}slot2", height=90)
-
-    if st.button("채점하기", type="primary"):
+    elif cfg["type"] == "dual_method":
         m1, fb1, method1 = score_slot(t1, cfg["slot1"])
         m2, fb2, method2 = score_slot(t2, cfg["slot2"], other_method=method1)
         with st.container(border=True):
-            st.markdown(f"**{cfg['slot1']['label']}**")
+            st.markdown(f"**{cfg['slot1']['symbol']}**")
             for f in fb1:
                 st.write(f)
         with st.container(border=True):
-            st.markdown(f"**{cfg['slot2']['label']}**")
+            st.markdown(f"**{cfg['slot2']['symbol']}**")
             for f in fb2:
                 st.write(f)
-
         both_filled = bool((t1 or "").strip()) and bool((t2 or "").strip())
-        passed_count = int(m1) + int(m2)
-        pts = round(passed_count / 2 * TOTAL_POINTS[q_no], 1)
+        pts = round((int(m1) + int(m2)) / 2 * TOTAL_POINTS[q_no], 1)
         if not both_filled:
             st.warning("두 문장을 모두 입력해야 정확히 채점됩니다.")
         st.success(f"### 총점(추정): {pts} / {TOTAL_POINTS[q_no]}점")
 
-    with st.expander("선택 가능한 설명 방법 조합별 모범 답안"):
-        st.caption("실제 선택지는 없지만, 서로 다른 설명 방법 조합을 고르는 것이 문항 구조이므로 대표 조합들을 예시로 제공합니다.")
-        for combo_name, sentences in cfg["model"].items():
-            st.markdown(f"**{combo_name}**")
-            for s in sentences:
-                st.write(f"- {s}")
-
-# ---------------- 서논술형 3: 시청각 연출형 ----------------
-else:
-    a_text = st.text_area(cfg["A"]["label"], key=f"{set_no}{q_no}A", height=100,
-                           placeholder="시각 요소와 그 효과를 함께 작성하세요.")
-    b_text = st.text_area(cfg["B"]["label"], key=f"{set_no}{q_no}B", height=100,
-                           placeholder="청각 요소와 그 효과를 함께 작성하세요.")
-
-    if st.button("채점하기", type="primary"):
+    else:  # av
         pa, fa, ma, ta = score_av(a_text, cfg["A"])
         pb, fb, mb, tb = score_av(b_text, cfg["B"])
         with st.container(border=True):
-            st.markdown(f"**{cfg['A']['label']}**")
+            st.markdown(f"**{cfg['A']['symbol']}**")
             for f in fa:
                 st.write(f)
         with st.container(border=True):
-            st.markdown(f"**{cfg['B']['label']}**")
+            st.markdown(f"**{cfg['B']['symbol']}**")
             for f in fb:
                 st.write(f)
         pts = round((int(pa) + int(pb)) / 2 * TOTAL_POINTS[q_no], 1)
         st.success(f"### 총점(추정): {pts} / {TOTAL_POINTS[q_no]}점")
 
-    with st.expander("모범 답안 보기"):
+with st.expander("모범 답안 보기"):
+    if cfg["type"] == "blank":
+        for k, v in cfg["model"].items():
+            st.write(f"**{k}**: {v}")
+    elif cfg["type"] == "dual_method":
+        st.caption("실제 선택지는 없지만, 서로 다른 설명 방법 조합을 고르는 것이 문항 구조이므로 대표 조합들을 예시로 제공합니다.")
+        for combo_name, sentences in cfg["model"].items():
+            st.markdown(f"**{combo_name}**")
+            for s in sentences:
+                st.write(f"- {s}")
+    else:
         st.write(f"**시각 요소(Ⓐ)**: {cfg['model']['A']}")
         st.write(f"**청각 요소(Ⓑ)**: {cfg['model']['B']}")
 
