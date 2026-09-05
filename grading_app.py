@@ -629,7 +629,7 @@ TOTAL_POINTS = {"1": 3, "2": 6, "3": 6}
 st.set_page_config(page_title="서논술형 자동 채점기", page_icon="📝", layout="centered")
 st.markdown(TABLE_CSS, unsafe_allow_html=True)
 st.title("📝 서·논술형 자동 채점기")
-st.caption("규칙 기반 채점: 용어가 없어도 의미가 통하면 인정 · 오개념·방향 오류 자동 탐지 · 설명 방법 특성 검증")
+st.caption("문제를 읽고, 답한 내용을 스스로 검토해 봅시다.")
 
 TOP_TABS = [
     ("1", "🩷 사회적 촉진"),
