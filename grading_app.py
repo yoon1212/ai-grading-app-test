@@ -164,6 +164,50 @@ TABLE_CSS = """
 .qtable th, .qtable td { border:1px solid #a9c9ea; padding:8px 10px; text-align:center; font-size:0.9rem; }
 .qtable th { background-color:#d7e8fb; }
 .qtable td.blank { background-color:#ffffff; color:#1a4d8f; font-weight:700; }
+
+/* 상단 대탭(세트 선택) — 밑줄형 */
+.top-tabs { border-bottom:1px solid #e6e6e6; margin-bottom:18px; padding-bottom:0; }
+.top-tabs div[data-testid="column"] { display:flex; justify-content:center; }
+.top-tabs button {
+    background:transparent !important;
+    border:none !important;
+    border-bottom:3px solid transparent !important;
+    border-radius:0 !important;
+    color:#8a8a8a !important;
+    font-weight:600 !important;
+    font-size:1.02rem !important;
+    padding:10px 4px !important;
+    box-shadow:none !important;
+    width:100%;
+}
+.top-tabs button:hover { color:#e6425c !important; }
+.top-tabs button[kind="primary"] {
+    background:transparent !important;
+    color:#e6425c !important;
+    border-bottom:3px solid #e6425c !important;
+    font-weight:800 !important;
+}
+
+/* 하위 소탭(문항 선택) — 필박스형 */
+.sub-tabs { margin:4px 0 20px 0; }
+.sub-tabs button {
+    border-radius:12px !important;
+    border:1px solid #d9d4ef !important;
+    background:#f7f5fc !important;
+    color:#4a4a4a !important;
+    font-weight:600 !important;
+    font-size:0.95rem !important;
+    padding:14px 10px !important;
+    box-shadow:none !important;
+    width:100%;
+}
+.sub-tabs button:hover { border-color:#3b6fd6 !important; color:#3b6fd6 !important; }
+.sub-tabs button[kind="primary"] {
+    background:#3b6fd6 !important;
+    border-color:#3b6fd6 !important;
+    color:#ffffff !important;
+    font-weight:800 !important;
+}
 </style>
 """
 
@@ -218,6 +262,21 @@ def build_table_html(header, rows):
             cells += f"<td{cls}>{_esc(cell['text'])}</td>"
         body += f"<tr>{cells}</tr>"
     return f"<table class='qtable'>{thead}{body}</table>"
+
+
+def render_material_box_raw(title: str, html_content: str):
+    """제목 + 임의 HTML(표 등)을 그대로 파란 박스에 담아 표시."""
+    st.markdown(
+        f"""
+        <div style="background-color:#eaf2fb; border:1px solid #a9c9ea;
+                    border-radius:10px; padding:18px 20px; margin-bottom:14px;
+                    line-height:1.7; font-size:0.95rem;">
+            <div style="font-weight:600; color:#1a4d8f; margin-bottom:8px;">📘 {title}</div>
+            {html_content}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_question_table(intro, table_html):
@@ -569,17 +628,89 @@ TOTAL_POINTS = {"1": 3, "2": 6, "3": 6}
 
 st.set_page_config(page_title="서논술형 자동 채점기", page_icon="📝", layout="centered")
 st.markdown(TABLE_CSS, unsafe_allow_html=True)
-st.title("📝 서·논술형 자동 채점기")
+st.title("📝 서·논술형 자동 채점기 (해냄연수 대비)")
 st.caption("규칙 기반 채점: 용어가 없어도 의미가 통하면 인정 · 오개념·방향 오류 자동 탐지 · 설명 방법 특성 검증")
 
-with st.sidebar:
-    st.header("문항 선택")
-    set_no = st.radio("세트", ["1", "2", "3"],
-                       format_func=lambda x: f"{x}세트 " + {"1": "(사회적 촉진·억제)", "2": "(정전기)", "3": "(AI 그림)"}[x])
-    q_no = st.radio("문항", ["1", "2", "3"], format_func=lambda x: f"서·논술형 {x}")
-    st.divider()
-    st.caption("‘지문 내용만 활용했는지’(외부 지식 여부)는 자동 판별이 어려워 참고용으로만 안내됩니다.")
+TOP_TABS = [
+    ("1", "🩷 사회적 촉진"),
+    ("2", "⚡ 정전기"),
+    ("3", "🎨 인공지능 예술"),
+    ("review", "📚 복습할 내용"),
+]
+SUB_TABS = [
+    ("1", "✏️ 1번 빈칸 채우기"),
+    ("2", "📝 2번 설명문 쓰기"),
+    ("3", "🎬 3번 영상 기획"),
+]
 
+if "set_no" not in st.session_state:
+    st.session_state.set_no = "1"
+if "q_no" not in st.session_state:
+    st.session_state.q_no = "1"
+
+# ---------------- 상단 대탭: 세트 선택 ----------------
+st.markdown('<div class="top-tabs">', unsafe_allow_html=True)
+cols = st.columns(len(TOP_TABS))
+for col, (key, label) in zip(cols, TOP_TABS):
+    with col:
+        is_active = st.session_state.set_no == key
+        if st.button(label, key=f"top_{key}", type="primary" if is_active else "secondary",
+                     use_container_width=True):
+            st.session_state.set_no = key
+            if key != "review":
+                st.session_state.q_no = "1"
+            st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ---------------- 복습할 내용 페이지 ----------------
+if st.session_state.set_no == "review":
+    st.subheader("📚 복습할 내용 — 다양한 설명 방법과 복합양식성")
+
+    method_table = build_table_html(
+        ["설명 방법", "필요한 상황 · 예시"],
+        [
+            [{"text": "정의"}, {"text": "대상의 뜻, 개념 등을 밝힐 때 — 예: 우정이란 친구 사이의 정을 말한다."}],
+            [{"text": "예시"}, {"text": "구체적인 예를 바탕으로 설명할 때 — 예: 콩으로 만든 식품에는 두부, 메주, 된장, 간장 등이 있다."}],
+            [{"text": "인과"}, {"text": "원인과 결과를 중심으로 설명할 때 — 예: 올해는 비가 거의 오지 않아서 흉년이 들었다."}],
+            [{"text": "분석"}, {"text": "여러 요소·부분으로 이루어진 대상을 설명할 때 — 예: 곤충의 몸은 머리, 가슴, 배로 이루어져 있다."}],
+            [{"text": "비교와 대조"}, {"text": "둘 이상의 공통점·차이점을 드러낼 때 — 예: 호랑이와 사자는 둘 다 고양잇과이지만, 호랑이는 단독 생활을 하고 사자는 무리 생활을 한다."}],
+            [{"text": "분류와 구분"}, {"text": "기준에 따라 종류를 묶거나 나눌 때 — 예: 악기는 소리 내는 방법에 따라 타악기, 현악기, 관악기 등으로 나뉜다."}],
+        ],
+    )
+    render_material_box_raw("다양한 설명 방법 (3(2) 설명하는 글 쓰기)", method_table)
+
+    render_material_box(
+        "복합양식성 (4(2) 영상 매체 자료 만들기)",
+        "복합양식성이란 문자, 소리, 그림, 사진, 동영상 등 다양한 양식이 결합된 것을 말하며, "
+        "영상 매체 자료에서 두드러지게 나타난다.",
+    )
+    render_condition_box([
+        "영상 매체 자료의 특징인 복합양식성을 고려해야 한다.",
+        "영상 매체 자료의 주제와 목적, 예상 시청자를 고려해야 한다.",
+    ])
+
+    storyboard_table = build_table_html(
+        ["장면", "화면", "자막", "소리"],
+        [[{"text": "장면 1"}, {"text": "-"}, {"text": "-"}, {"text": "효과음 · 배경음악"}]],
+    )
+    render_material_box_raw("스토리보드의 구성", storyboard_table)
+
+    st.stop()
+
+# ---------------- 하위 소탭: 문항 선택 ----------------
+st.markdown('<div class="sub-tabs">', unsafe_allow_html=True)
+cols2 = st.columns(len(SUB_TABS))
+for col, (key, label) in zip(cols2, SUB_TABS):
+    with col:
+        is_active = st.session_state.q_no == key
+        if st.button(label, key=f"sub_{key}", type="primary" if is_active else "secondary",
+                     use_container_width=True):
+            st.session_state.q_no = key
+            st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
+
+set_no = st.session_state.set_no
+q_no = st.session_state.q_no
 cfg = CONFIG[(set_no, q_no)]
 st.subheader(f"{set_no}세트 · 서·논술형 {q_no}")
 
